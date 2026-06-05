@@ -45,7 +45,6 @@ for color, stage in zip(("red", "green", "blue", "orange", "cyan"),
         my_df.to_parquet(job_info_file)
     else:
         my_df = pd.read_parquet(job_info_file)
-    my_df.to_parquet(job_info_file)
     wall_time = plot_time_history(my_df, label=stage, color=color,
                                   weight_column="RequestCpus", alpha=1.0)
     cpu_time = plot_time_history(my_df, label=f"{stage}, cpu weighted",
