@@ -40,10 +40,11 @@ for color, stage in zip(("red", "green", "blue", "orange", "cyan"),
             print(i, job_batch_id)
             dfs.append(get_os_job_info(job_batch_id))
         my_df = pd.concat(dfs)
+        # Omit jobs that have not finished
+        my_df = my_df.query("CompletionDate == CompletionDate")
         my_df.to_parquet(job_info_file)
     else:
         my_df = pd.read_parquet(job_info_file)
-    my_df = my_df.query("CompletionDate == CompletionDate")
     my_df.to_parquet(job_info_file)
     wall_time = plot_time_history(my_df, label=stage, color=color,
                                   weight_column="RequestCpus", alpha=1.0)
