@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 from astropy.time import Time
+import numpy as np
 from htc_job_history import get_job_batch_ids, get_os_job_info, plot_time_history
 
 class JobInspector:
@@ -27,7 +28,8 @@ class JobInspector:
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
         else:
-            if job_batch_id not in set(self.df0["JobBatchId"]):
+            if (job_batch_id not in self.df and
+                job_batch_id not in set(self.df0["JobBatchId"])):
                 print(f"{job_batch_id} not found in current set")
         if job_batch_id not in self.df:
             self.df[job_batch_id] = get_os_job_info(job_batch_id)
@@ -46,6 +48,8 @@ class JobInspector:
 
         if fignum not in plt.get_fignums():
             plt.figure(fignum, figsize=figsize)
+        else:
+            plt.figure(fignum)
         if not oplot:
             plt.clf()
         plt.subplot(2, 1, 1)
@@ -54,16 +58,18 @@ class JobInspector:
         color = artist.get_color()
         cpu, _ = plot_time_history(df, weight_column="cpu_efficiency",
                                    alpha=1.0, color=color, linestyle="--")
-        plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
+        if target_task is None:
+            plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
         plt.ylabel("concurrent processes")
         if target_task is None:
             plt.subplot(2, 1, 2)
             mem_request, _ = plot_time_history(
-                df, weight_column="memory_request", alpha=1.0, color=color,
-                yfactor=1.0/gb_per_core, label="requested memory")
-            rss, _ =  plot_time_history(df, weight_column="rss", alpha=1.0,
+                df, weight_column="RequestCpus", alpha=1.0, color=color,
+                yfactor=np.ceil(df["memory_provisioned"].to_numpy()/gb_per_core),
+                label="provisioned")
+            rss, _ =  plot_time_history(df, weight_column="RequestCpus", alpha=1.0,
                                         color=color, linestyle="--",
-                                        yfactor=1.0/gb_per_core,
+                                        yfactor=df["rss"].to_numpy()/gb_per_core,
                                         label="rss-weighted")
             plt.title(f"memory efficiency = {rss/mem_request:.2f}")
             plt.ylabel("core occupancy")
@@ -72,7 +78,7 @@ class JobInspector:
         plt.xlabel("Time (PT)")
         if target_task is not None:
             plt.legend(fontsize='x-small')
-            plt.tight_layout()
+        plt.tight_layout()
 
     def overlay_tasks(self):
         for task_type in self.task_types():
