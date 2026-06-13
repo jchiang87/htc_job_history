@@ -23,7 +23,8 @@ class JobInspector:
         self._task_types = None
 
     def plot_job_batch(self, job_batch_id, fignum=1, target_task=None,
-                       oplot=False, gb_per_core=4.0, figsize=(10, 8)):
+                       oplot=False, gb_per_core=4.0, figsize=(10, 8),
+                       show_legend=True):
         if isinstance(job_batch_id, int):
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
@@ -57,7 +58,7 @@ class JobInspector:
                                          alpha=1.0, label=label)
         color = artist.get_color()
         cpu, _ = plot_time_history(df, weight_column="cpu_efficiency",
-                                   alpha=1.0, color=color, linestyle="--")
+                                   alpha=0.5, color=color, linestyle="--")
         if target_task is None:
             plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
         plt.ylabel("concurrent processes")
@@ -67,23 +68,24 @@ class JobInspector:
                 df, weight_column="RequestCpus", alpha=1.0, color=color,
                 yfactor=np.ceil(df["memory_provisioned"].to_numpy()/gb_per_core),
                 label="provisioned")
-            rss, _ =  plot_time_history(df, weight_column="RequestCpus", alpha=1.0,
-                                        color=color, linestyle="--",
+            rss, _ =  plot_time_history(df, weight_column="RequestCpus",
+                                        color=color, alpha=0.5, linestyle="--",
                                         yfactor=df["rss"].to_numpy()/gb_per_core,
                                         label="rss-weighted")
             plt.title(f"memory efficiency = {rss/mem_request:.2f}")
             plt.ylabel("core occupancy")
             plt.legend(fontsize='x-small')
-            plt.suptitle(f"JobBatchID: {job_batch_id}")
+            job_batch_name = self.df0.query(f"JobBatchId == '{job_batch_id}'").iloc[0]["JobBatchName"]
+            plt.suptitle(f"{job_batch_id}: {job_batch_name}")
         plt.xlabel("Time (PT)")
-        if target_task is not None:
+        if show_legend and target_task is not None:
             plt.legend(fontsize='x-small')
         plt.tight_layout()
 
-    def overlay_tasks(self):
+    def overlay_tasks(self, show_legend=False):
         for task_type in self.task_types():
             self.plot_job_batch(self.job_batch_id, target_task=task_type,
-                                oplot=True)
+                                oplot=True, show_legend=show_legend)
 
     def task_types(self, job_batch_id=None):
         if self._task_types is not None:
