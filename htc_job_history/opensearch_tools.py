@@ -100,7 +100,8 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
         for item in hits:
             row = item['_source']
             if (row["RemoteWallClockTime"] <= 0 or
-                "bps_job_label" not in row):
+                "bps_job_label" not in row or
+                row["JobStatus"] != 4):
                 continue
             for column in columns:
                 if column not in row:
