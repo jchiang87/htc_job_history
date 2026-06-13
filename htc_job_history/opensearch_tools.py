@@ -72,7 +72,8 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
                "CompletionDate", "JobStatus", "bps_job_name",
                "bps_job_label", "StartdName", "ExitCode", "Err", "QDate",
                "RequestCpus", "RemoteUserCpu", "RemoteSysCpu",
-               "RemoteWallClockTime"]
+               "RemoteWallClockTime", "ResidentSetSize", "RequestMemory",
+               "MemoryProvisioned"]
 
     body = {
         'query': {
@@ -98,7 +99,9 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
     while len(hits) > 0:
         for item in hits:
             row = item['_source']
-            if row["RemoteWallClockTime"] <= 0:
+            if (row["RemoteWallClockTime"] <= 0 or
+                "bps_job_label" not in row or
+                row["JobStatus"] != 4):
                 continue
             for column in columns:
                 if column not in row:
@@ -116,6 +119,9 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
             cpu_efficiency = ((row["RemoteUserCpu"] + row["RemoteSysCpu"]) /
                               row["RemoteWallClockTime"])
             data['cpu_efficiency'].append(cpu_efficiency)
+            data['memory_request'].append(row["RequestMemory"]/1e3)  # GB
+            data['memory_provisioned'].append(row["MemoryProvisioned"]/1e3)  # GB
+            data['rss'].append(row["ResidentSetSize"]/1e6)  # GB
         response = OSCLIENT.scroll(
             scroll_id=scroll_id,
             scroll="1m",
