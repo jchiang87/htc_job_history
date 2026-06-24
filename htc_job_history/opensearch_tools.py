@@ -42,7 +42,7 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
                 "aggs": {
                     "start":      {"min": {"field": "JobStartDate"}},
                     "completion": {"max": {"field": "CompletionDate"}},
-                    "name":       {"terms": {"field": "JobBatchName", "size": 1}}
+                    "name":       {"terms": {"field": "JobBatchName", "size": 1}},
                 }
             }
         },
@@ -56,6 +56,7 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
         if bucket['completion']['value'] is None:
             continue
         data['JobBatchId'].append(str(bucket['key']))
+        data['doc_count'].append(bucket['doc_count'])
         start = datetime.fromtimestamp(
             int(bucket['start']['value_as_string']), tz=timezone.utc)
         data['JobStartDate'].append(start)
@@ -73,7 +74,7 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
                "bps_job_label", "StartdName", "ExitCode", "Err", "QDate",
                "RequestCpus", "RemoteUserCpu", "RemoteSysCpu",
                "RemoteWallClockTime", "ResidentSetSize", "RequestMemory",
-               "MemoryProvisioned"]
+               "MemoryProvisioned", "NumJobStarts", "CumulativeSuspensionTime"]
 
     body = {
         'query': {

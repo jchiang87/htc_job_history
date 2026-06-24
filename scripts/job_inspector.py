@@ -21,10 +21,10 @@ class JobInspector:
         self.df = {}
         self.job_batch_id = None
         self._task_types = None
+        self._fignum = 1
 
-    def plot_job_batch(self, job_batch_id, fignum=1, target_task=None,
-                       oplot=False, gb_per_core=4.0, figsize=(10, 8),
-                       show_legend=True):
+    def plot(self, job_batch_id, fignum=1, target_task=None, oplot=False,
+             gb_per_core=4.0, figsize=(10, 8), show_legend=True):
         if isinstance(job_batch_id, int):
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
@@ -51,6 +51,7 @@ class JobInspector:
             plt.figure(fignum, figsize=figsize)
         else:
             plt.figure(fignum)
+        self._fignum = fignum
         if not oplot:
             plt.clf()
         plt.subplot(2, 1, 1)
@@ -75,17 +76,25 @@ class JobInspector:
             plt.title(f"memory efficiency = {rss/mem_request:.2f}")
             plt.ylabel("core occupancy")
             plt.legend(fontsize='x-small')
-            job_batch_name = self.df0.query(f"JobBatchId == '{job_batch_id}'").iloc[0]["JobBatchName"]
+            try:
+                job_batch_name \
+                    = self.df0.query(f"JobBatchId == '{job_batch_id}'").iloc[0]["JobBatchName"]
+            except IndexError:
+                job_batch_name = ""
             plt.suptitle(f"{job_batch_id}: {job_batch_name}")
         plt.xlabel("Time (PT)")
         if show_legend and target_task is not None:
             plt.legend(fontsize='x-small')
         plt.tight_layout()
+        if target_task is None:
+            self.overlay_tasks(show_legend=True)
 
     def overlay_tasks(self, show_legend=False):
         for task_type in self.task_types():
-            self.plot_job_batch(self.job_batch_id, target_task=task_type,
-                                oplot=True, show_legend=show_legend)
+            self.plot(self.job_batch_id, target_task=task_type, oplot=True,
+                      show_legend=False, fignum=self._fignum)
+        if show_legend:
+            plt.legend(fontsize=6, ncol=2)
 
     def task_types(self, job_batch_id=None):
         if self._task_types is not None:
@@ -103,6 +112,9 @@ class JobInspector:
             i += 1
         self._task_types = task_list
         return task_list
+
+    def current_df(self):
+        return self.df[self.job_batch_id]
 
 
 if __name__ == '__main__':
