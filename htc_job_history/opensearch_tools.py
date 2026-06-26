@@ -56,7 +56,6 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
         if bucket['completion']['value'] is None:
             continue
         data['JobBatchId'].append(str(bucket['key']))
-        data['doc_count'].append(bucket['doc_count'])
         start = datetime.fromtimestamp(
             int(bucket['start']['value_as_string']), tz=timezone.utc)
         data['JobStartDate'].append(start)
@@ -64,6 +63,7 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
             int(bucket['completion']['value_as_string']), tz=timezone.utc)
         data['CompletionDate'].append(completion)
         data['JobBatchName'].append(bucket['name']['buckets'][0]['key'])
+        data['doc_count'].append(bucket['doc_count'])
     return pd.DataFrame(data)
 
 

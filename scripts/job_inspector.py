@@ -17,7 +17,8 @@ class JobInspector:
         if self.df0.empty:
             raise ValueError("No workflows found")
         self.df0 = self.df0.sort_values("JobStartDate", ignore_index=True)
-        print(self.df0.tail(20))
+        columns = "JobBatchId doc_count JobBatchName".split()
+        print(self.df0[columns].tail(20))
         self.df = {}
         self.job_batch_id = None
         self._task_types = None
@@ -66,14 +67,18 @@ class JobInspector:
         if target_task is None:
             plt.subplot(2, 1, 2)
             mem_request, _ = plot_time_history(
-                df, weight_column="RequestCpus", alpha=1.0, color=color,
-                yfactor=np.ceil(df["memory_provisioned"].to_numpy()/gb_per_core),
+                df, alpha=1.0, color=color,
+                yfactor=np.ceil(df["memory_provisioned"]/gb_per_core),
                 label="provisioned")
-            rss, _ =  plot_time_history(df, weight_column="RequestCpus",
-                                        color=color, alpha=0.5, linestyle="--",
-                                        yfactor=df["rss"].to_numpy()/gb_per_core,
-                                        label="rss-weighted")
-            plt.title(f"memory efficiency = {rss/mem_request:.2f}")
+            mem_needed, _ =  plot_time_history(
+                df, alpha=0.5, color=color, linestyle=":",
+                yfactor=np.ceil(df["rss"].to_numpy()/gb_per_core),
+                label="needed")
+            rss, _ =  plot_time_history(
+                df, alpha=0.5, color=color, linestyle="--",
+                yfactor=df["rss"].to_numpy()/gb_per_core,
+                label="rss-weighted")
+            plt.title(f"memory efficiency = {mem_needed/mem_request:.2f}")
             plt.ylabel("core occupancy")
             plt.legend(fontsize='x-small')
             try:
