@@ -72,7 +72,8 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
                "JobCurrentStartDate", "Iwd",
                "CompletionDate", "JobStatus", "bps_job_name",
                "bps_job_label", "StartdName", "ExitCode", "Err", "QDate",
-               "RequestCpus", "RemoteUserCpu", "RemoteSysCpu",
+               "RequestCpus", "CumulativeRemoteUserCpu",
+               "CumulativeRemoteSysCpu",
                "RemoteWallClockTime", "ResidentSetSize", "RequestMemory",
                "MemoryProvisioned", "NumJobStarts", "CumulativeSuspensionTime"]
 
@@ -117,8 +118,9 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
             end_dt = datetime.fromtimestamp(end_ts) if end_ts else None
             data['end_dt'].append(end_dt)
             # CPU efficiency calculation
-            cpu_efficiency = ((row["RemoteUserCpu"] + row["RemoteSysCpu"]) /
-                              row["RemoteWallClockTime"])
+            cumulative_cpu = (row["CumulativeRemoteUserCpu"]
+                              + row["CumulativeRemoteSysCpu"])
+            cpu_efficiency = cumulative_cpu / row["RemoteWallClockTime"]
             data['cpu_efficiency'].append(cpu_efficiency)
             data['memory_request'].append(row["RequestMemory"]/1e3)  # GB
             data['memory_provisioned'].append(row["MemoryProvisioned"]/1e3)  # GB
