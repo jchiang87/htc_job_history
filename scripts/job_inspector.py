@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 from astropy.time import Time
 import numpy as np
@@ -8,7 +8,7 @@ class JobInspector:
     def __init__(self, batch_name_substr, start_date=None, end_date=None,
                  hours_back=None):
         if end_date is None:
-            end_date = datetime.now().isoformat()
+            end_date = datetime.now(timezone.utc).isoformat()[:-len("+00:00")]
         if start_date is None:
             dt = timedelta(hours=hours_back)
             start_date = Time(end_date, format="isot").datetime - dt
@@ -25,7 +25,8 @@ class JobInspector:
         self._fignum = 1
 
     def plot(self, job_batch_id, fignum=1, target_task=None, oplot=False,
-             gb_per_core=4.0, figsize=(10, 8), show_legend=True):
+             gb_per_core=4.096, figsize=(10, 8), show_legend=True,
+             refresh=False, added_attributes=None, timezone="US/Pacific"):
         if isinstance(job_batch_id, int):
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
