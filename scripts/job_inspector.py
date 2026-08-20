@@ -2,27 +2,50 @@ from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 from astropy.time import Time
 import numpy as np
-from htc_job_history import get_job_batch_ids, get_os_job_info, plot_time_history
+import pandas as pd
+from htc_job_history import (get_job_batch_ids, get_os_job_info,
+                             plot_time_history)
 
 class JobInspector:
-    def __init__(self, batch_name_substr, start_date=None, end_date=None,
-                 hours_back=None):
+    def __init__(self, batch_name_substr, hours_back=None,
+                 start_date=None, end_date=None, min_doc_count=5,
+                 bps_job_label=None, verbose=True):
+        self.df = {}
+        self.job_batch_id = None
+        self._task_types = {}
+        self._fignum = 1
+        if hours_back is None and start_date is None:
+            print("Considering last 7*24 hours:")
+            hours_back = 7*24
         if end_date is None:
             end_date = datetime.now(timezone.utc).isoformat()[:-len("+00:00")]
         if start_date is None:
             dt = timedelta(hours=hours_back)
             start_date = Time(end_date, format="isot").datetime - dt
             start_date = start_date.isoformat()
-        self.df0 = get_job_batch_ids(batch_name_substr, start_date, end_date)
-        if self.df0.empty:
-            raise ValueError("No workflows found")
-        self.df0 = self.df0.sort_values("JobStartDate", ignore_index=True)
-        columns = "JobBatchId doc_count JobBatchName".split()
-        print(self.df0[columns].tail(20))
-        self.df = {}
-        self.job_batch_id = None
-        self._task_types = None
-        self._fignum = 1
+        self.df0 = get_job_batch_ids(batch_name_substr, start_date, end_date,
+                                     bps_job_label=bps_job_label)
+        if not self.df0.empty:
+            self.df0 = self.df0.query(f"doc_count > {min_doc_count}")
+            self.df0 = self.df0.sort_values("JobStartDate", ignore_index=True)
+            columns = "JobBatchId doc_count JobBatchName".split()
+            if verbose:
+                print(self.df0[columns].tail(20))
+        else:
+            if verbose:
+                print("No workflows found")
+
+    def get_job_info(self, job_batch_ids, added_attributes=None):
+        if not isinstance(job_batch_ids, (tuple, list)):
+            job_batch_ids = [job_batch_ids]
+        _ids = []
+        for job_batch_id in job_batch_ids:
+            if isinstance(job_batch_id, int):
+                _ids.append(self.df0.iloc[job_batch_id]['JobBatchId'])
+            else:
+                _ids.append(job_batch_id)
+        return pd.concat([get_os_job_info(_, added_attributes=added_attributes)
+                          for _ in _ids])
 
     def plot(self, job_batch_id, fignum=1, target_task=None, oplot=False,
              gb_per_core=4.096, figsize=(10, 8), show_legend=True,
@@ -31,12 +54,14 @@ class JobInspector:
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
         else:
-            if (job_batch_id not in self.df and
-                job_batch_id not in set(self.df0["JobBatchId"])):
+            if (self.df0.empty or
+                (job_batch_id not in self.df and
+                 job_batch_id not in set(self.df0["JobBatchId"]))
+            ):
                 print(f"{job_batch_id} not found in current set")
-        if job_batch_id not in self.df:
-            self.df[job_batch_id] = get_os_job_info(job_batch_id)
-            self._task_types = None
+        if job_batch_id not in self.df or refresh:
+            self.df[job_batch_id] = get_os_job_info(
+                job_batch_id, added_attributes=added_attributes)
         self.job_batch_id = job_batch_id
         if target_task is not None:
             query = f"bps_job_label == '{target_task}'"
@@ -90,8 +115,9 @@ class JobInspector:
             plt.legend(fontsize='x-small')
             try:
                 job_batch_name \
-                    = self.df0.query(f"JobBatchId == '{job_batch_id}'").iloc[0]["JobBatchName"]
-            except IndexError:
+                    = (self.df0.query(f"JobBatchId == '{job_batch_id}'")
+                       .iloc[0]["JobBatchName"])
+            except (IndexError, pd.errors.UndefinedVariableError):
                 job_batch_name = ""
             plt.suptitle(f"{job_batch_id}: {job_batch_name}")
             plt.xlabel(f"Time ({timezone})")
@@ -109,8 +135,8 @@ class JobInspector:
             plt.legend(fontsize=6, ncol=2)
 
     def task_types(self, job_batch_id=None):
-        if self._task_types is not None:
-            return self._task_types
+        if job_batch_id in self._task_types:
+            return self._task_types[job_batch_id]
         if job_batch_id is None:
             job_batch_id = self.job_batch_id
         df = self.df[job_batch_id].sort_values("JobStartDate")
@@ -122,7 +148,7 @@ class JobInspector:
             if tasks[i] is not None and tasks[i] not in task_list:
                 task_list.append(tasks[i])
             i += 1
-        self._task_types = task_list
+        self._task_types[job_batch_id] = task_list
         return task_list
 
     def current_df(self):

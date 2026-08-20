@@ -20,12 +20,12 @@ OSCLIENT = OpenSearch(hosts=[{'host': host, "port": port}],
 
 
 def get_job_batch_ids(batch_name_substr, start_date, end_date,
-                      index="htcondor-history-v1"):
+                      index="htcondor-history-v1", bps_job_label=None):
     body = {
         "query": {
             "bool": {
                 "must": [
-                    {"wildcard": {"JobBatchName": f"*{batch_name_substr}*"}}
+                    {"wildcard": {"JobBatchName": f"*{batch_name_substr}*"}},
                 ],
                 "filter": [
                     {"range": {"JobStartDate": {
@@ -48,6 +48,10 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
         },
         "size": 0
     }
+    if bps_job_label is not None:
+        body['query']['bool']['must'].append(
+            {'match': {"bps_job_label": bps_job_label}}
+        )
 
     response = OSCLIENT.search(body=body, index=index)
 
@@ -67,15 +71,20 @@ def get_job_batch_ids(batch_name_substr, start_date, end_date,
     return pd.DataFrame(data)
 
 
-def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
-    columns = ["JobBatchId", "ClusterId", "ProcId", "JobStartDate",
-               "JobCurrentStartDate", "Iwd",
+def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000,
+                    added_attributes=None):
+    columns = ["JobBatchId", "bps_run", "ClusterId", "ProcId", "JobStartDate",
+               "JobBatchName",
+               "JobCurrentStartDate", "Iwd", "Cmd",
                "CompletionDate", "JobStatus", "bps_job_name",
                "bps_job_label", "StartdName", "ExitCode", "Err", "QDate",
                "RequestCpus", "CumulativeRemoteUserCpu",
-               "CumulativeRemoteSysCpu",
+               "CumulativeRemoteSysCpu", "MemoryUsage", "RemoteUserCpu",
+               "RemoteSysCpu",
                "RemoteWallClockTime", "ResidentSetSize", "RequestMemory",
                "MemoryProvisioned", "NumJobStarts", "CumulativeSuspensionTime"]
+    if added_attributes is not None:
+        columns.extend(added_attributes)
 
     body = {
         'query': {
@@ -122,11 +131,17 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
             # CPU efficiency calculation
             cumulative_cpu = (row["CumulativeRemoteUserCpu"]
                               + row["CumulativeRemoteSysCpu"])
-            cpu_efficiency = cumulative_cpu / row["RemoteWallClockTime"]
+            cpu_efficiency = (cumulative_cpu /
+                              (row["RemoteWallClockTime"] * row["RequestCpus"]))
             data['cpu_efficiency'].append(cpu_efficiency)
             data['memory_request'].append(row["RequestMemory"]/1e3)  # GB
-            data['memory_provisioned'].append(row["MemoryProvisioned"]/1e3)  # GB
+            data['memory_provisioned'].append(row.get("MemoryProvisioned", 0)/1e3)  # GB
             data['rss'].append(row["ResidentSetSize"]/1e6)  # GB
+            # Last job try info.
+            wall_time = row["CompletionDate"] - row["JobCurrentStartDate"]
+            cpu_time = row["RemoteUserCpu"] + row["RemoteSysCpu"]
+            data['wall_time'].append(wall_time)
+            data['cpu_time'].append(cpu_time)
         response = OSCLIENT.scroll(
             scroll_id=scroll_id,
             scroll="1m",
