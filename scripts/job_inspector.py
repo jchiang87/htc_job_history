@@ -58,27 +58,33 @@ class JobInspector:
             plt.clf()
         plt.subplot(2, 1, 1)
         wall, artist = plot_time_history(df, weight_column="RequestCpus",
-                                         alpha=1.0, label=label)
+                                         alpha=1.0, label=label,
+                                         timezone=timezone)
         color = artist.get_color()
         cpu, _ = plot_time_history(df, weight_column="cpu_efficiency",
-                                   alpha=0.5, color=color, linestyle="--")
+                                   alpha=0.5, color=color, linestyle="--",
+                                   timezone=timezone)
         if target_task is None:
             plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
+            plt.xlabel(f"Time ({timezone})")
         plt.ylabel("concurrent processes")
         if target_task is None:
             plt.subplot(2, 1, 2)
             mem_request, _ = plot_time_history(
                 df, alpha=1.0, color=color,
                 yfactor=np.ceil(df["memory_provisioned"]/gb_per_core),
-                label="provisioned")
+                label="provisioned",
+                timezone=timezone)
             mem_needed, _ =  plot_time_history(
                 df, alpha=0.5, color=color, linestyle=":",
                 yfactor=np.ceil(df["rss"].to_numpy()/gb_per_core),
-                label="needed")
+                label="needed",
+                timezone=timezone)
             rss, _ =  plot_time_history(
                 df, alpha=0.5, color=color, linestyle="--",
                 yfactor=df["rss"].to_numpy()/gb_per_core,
-                label="rss-weighted")
+                label="rss-weighted",
+                timezone=timezone)
             plt.title(f"memory efficiency = {mem_needed/mem_request:.2f}")
             plt.ylabel("core occupancy")
             plt.legend(fontsize='x-small')
@@ -88,17 +94,17 @@ class JobInspector:
             except IndexError:
                 job_batch_name = ""
             plt.suptitle(f"{job_batch_id}: {job_batch_name}")
-        plt.xlabel("Time (PT)")
+            plt.xlabel(f"Time ({timezone})")
         if show_legend and target_task is not None:
             plt.legend(fontsize='x-small')
         plt.tight_layout()
         if target_task is None:
-            self.overlay_tasks(show_legend=True)
+            self.overlay_tasks(show_legend=True, timezone=timezone)
 
-    def overlay_tasks(self, show_legend=False):
+    def overlay_tasks(self, show_legend=False, timezone="UTC"):
         for task_type in self.task_types():
             self.plot(self.job_batch_id, target_task=task_type, oplot=True,
-                      show_legend=False, fignum=self._fignum)
+                      show_legend=False, fignum=self._fignum, timezone=timezone)
         if show_legend:
             plt.legend(fontsize=6, ncol=2)
 
