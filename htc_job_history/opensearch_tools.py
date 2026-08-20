@@ -112,10 +112,12 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000):
                     value = row[column]
                 data[column].append(value)
             start_ts = row.get('JobStartDate', 0)
-            start_dt = datetime.fromtimestamp(start_ts) if start_ts else None
+            start_dt = (datetime.fromtimestamp(start_ts, tz=timezone.utc)
+                        if start_ts else None)
             data['start_dt'].append(start_dt)
             end_ts = row.get('CompletionDate', 0)
-            end_dt = datetime.fromtimestamp(end_ts) if end_ts else None
+            end_dt = (datetime.fromtimestamp(end_ts, tz=timezone.utc)
+                      if end_ts else None)
             data['end_dt'].append(end_dt)
             # CPU efficiency calculation
             cumulative_cpu = (row["CumulativeRemoteUserCpu"]
