@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import matplotlib.pyplot as plt
 from astropy.time import Time
@@ -5,6 +6,35 @@ import numpy as np
 import pandas as pd
 from htc_job_history import (get_job_batch_ids, get_os_job_info,
                              plot_time_history)
+
+
+def job_performance(job_batch_id):
+    df0 = get_os_job_info(job_batch_id)
+    job_types = set(df0['bps_job_label'])
+
+    data = defaultdict(list)
+    for job_type in job_types:
+        df = df0.query(f"bps_job_label=='{job_type}' and cpu_time > 0")
+        data['job_type'].append(job_type)
+        total_wall_time = sum(df['wall_time']*df['RequestCpus'])/3600.
+        total_cpu_time = sum(df['cpu_time'])/3600.
+        data['total_wall_time (h)'].append(total_wall_time)
+        data['total_cpu_time (h)'].append(total_cpu_time)
+        data['wall - cpu time'].append(total_wall_time - total_cpu_time)
+        data['mean wall/cpu'].append(
+            np.mean(df['wall_time']*df['RequestCpus']/df['cpu_time']))
+        data['num_jobs'].append(len(df))
+        data['mean wait time (min)'].append(
+            np.mean((df['JobStartDate'] - df['QDate'])/60.)
+        )
+        data['mean memory_request'].append(np.mean(df['memory_request']))
+
+        df1 = pd.DataFrame(data).sort_values(
+            ['wall - cpu time', 'mean wall/cpu', 'num_jobs'],
+            ascending=False, ignore_index=True)
+
+    return df1
+
 
 class JobInspector:
     def __init__(self, batch_name_substr, hours_back=None,
@@ -49,7 +79,8 @@ class JobInspector:
 
     def plot(self, job_batch_id, fignum=1, target_task=None, oplot=False,
              gb_per_core=4.096, figsize=(10, 8), show_legend=True,
-             refresh=False, added_attributes=None, timezone="US/Pacific"):
+             refresh=False, added_attributes=None, timezone="US/Pacific",
+             plot_memory_usage=True):
         if isinstance(job_batch_id, int):
             job_batch_id = self.df0.iloc[job_batch_id]["JobBatchId"]
             print(f"plotting data for {job_batch_id}")
@@ -63,16 +94,22 @@ class JobInspector:
             self.df[job_batch_id] = get_os_job_info(
                 job_batch_id, added_attributes=added_attributes)
         self.job_batch_id = job_batch_id
+        try:
+            job_batch_name \
+                = (self.df0.query(f"JobBatchId == '{job_batch_id}'")
+                   .iloc[0]["JobBatchName"])
+        except (IndexError, pd.errors.UndefinedVariableError):
+            job_batch_name = ""
         if target_task is not None:
             query = f"bps_job_label == '{target_task}'"
             df = self.df[job_batch_id].query(query)
             label = target_task
-            print(target_task, end=": ")
+#            print(target_task, end=": ")
         else:
             df = self.df[job_batch_id]
             label = None
-            print("num jobs", end=": ")
-        print(len(df))
+#            print("num jobs", end=": ")
+#        print(len(df))
 
         if fignum not in plt.get_fignums():
             plt.figure(fignum, figsize=figsize)
@@ -81,7 +118,8 @@ class JobInspector:
         self._fignum = fignum
         if not oplot:
             plt.clf()
-        plt.subplot(2, 1, 1)
+        if plot_memory_usage:
+            plt.subplot(2, 1, 1)
         wall, artist = plot_time_history(df, weight_column="RequestCpus",
                                          alpha=1.0, label=label,
                                          timezone=timezone)
@@ -90,10 +128,13 @@ class JobInspector:
                                    alpha=0.5, color=color, linestyle="--",
                                    timezone=timezone)
         if target_task is None:
-            plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
+            if plot_memory_usage:
+                plt.title(f"cpu_efficiency = {cpu/wall:.2f}")
+            else:
+                plt.title(f"{job_batch_id}: {job_batch_name}")
             plt.xlabel(f"Time ({timezone})")
         plt.ylabel("concurrent processes")
-        if target_task is None:
+        if target_task is None and plot_memory_usage:
             plt.subplot(2, 1, 2)
             mem_request, _ = plot_time_history(
                 df, alpha=1.0, color=color,
@@ -113,24 +154,23 @@ class JobInspector:
             plt.title(f"memory efficiency = {mem_needed/mem_request:.2f}")
             plt.ylabel("core occupancy")
             plt.legend(fontsize='x-small')
-            try:
-                job_batch_name \
-                    = (self.df0.query(f"JobBatchId == '{job_batch_id}'")
-                       .iloc[0]["JobBatchName"])
-            except (IndexError, pd.errors.UndefinedVariableError):
-                job_batch_name = ""
             plt.suptitle(f"{job_batch_id}: {job_batch_name}")
             plt.xlabel(f"Time ({timezone})")
         if show_legend and target_task is not None:
             plt.legend(fontsize='x-small')
         plt.tight_layout()
         if target_task is None:
-            self.overlay_tasks(show_legend=True, timezone=timezone)
+            self.overlay_tasks(show_legend=True, timezone=timezone,
+                               plot_memory_usage=plot_memory_usage)
+            df = job_performance(job_batch_id)
+            print(df[df.columns[:-2]])
 
-    def overlay_tasks(self, show_legend=False, timezone="UTC"):
+    def overlay_tasks(self, show_legend=False, timezone="UTC",
+                      plot_memory_usage=True):
         for task_type in self.task_types():
             self.plot(self.job_batch_id, target_task=task_type, oplot=True,
-                      show_legend=False, fignum=self._fignum, timezone=timezone)
+                      show_legend=False, fignum=self._fignum, timezone=timezone,
+                      plot_memory_usage=plot_memory_usage)
         if show_legend:
             plt.legend(fontsize=6, ncol=2)
 

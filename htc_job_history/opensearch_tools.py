@@ -140,8 +140,10 @@ def get_os_job_info(job_batch_id, index="htcondor-history-v1", size=10000,
             # Last job try info.
             wall_time = row["CompletionDate"] - row["JobCurrentStartDate"]
             cpu_time = row["RemoteUserCpu"] + row["RemoteSysCpu"]
+            wait_time = row["JobStartDate"] - row["QDate"]
             data['wall_time'].append(wall_time)
             data['cpu_time'].append(cpu_time)
+            data['wait_time'].append(wait_time)
         response = OSCLIENT.scroll(
             scroll_id=scroll_id,
             scroll="1m",
