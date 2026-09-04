@@ -5,35 +5,7 @@ from astropy.time import Time
 import numpy as np
 import pandas as pd
 from htc_job_history import (get_job_batch_ids, get_os_job_info,
-                             plot_time_history)
-
-
-def job_performance(job_batch_id):
-    df0 = get_os_job_info(job_batch_id)
-    job_types = set(df0['bps_job_label'])
-
-    data = defaultdict(list)
-    for job_type in job_types:
-        df = df0.query(f"bps_job_label=='{job_type}' and cpu_time > 0")
-        data['job_type'].append(job_type)
-        total_wall_time = sum(df['wall_time']*df['RequestCpus'])/3600.
-        total_cpu_time = sum(df['cpu_time'])/3600.
-        data['total_wall_time (h)'].append(total_wall_time)
-        data['total_cpu_time (h)'].append(total_cpu_time)
-        data['wall - cpu time'].append(total_wall_time - total_cpu_time)
-        data['mean wall/cpu'].append(
-            np.mean(df['wall_time']*df['RequestCpus']/df['cpu_time']))
-        data['num_jobs'].append(len(df))
-        data['mean wait time (min)'].append(
-            np.mean((df['JobStartDate'] - df['QDate'])/60.)
-        )
-        data['mean memory_request'].append(np.mean(df['memory_request']))
-
-        df1 = pd.DataFrame(data).sort_values(
-            ['wall - cpu time', 'mean wall/cpu', 'num_jobs'],
-            ascending=False, ignore_index=True)
-
-    return df1
+                             plot_time_history, get_workflows, job_performance)
 
 
 class JobInspector:
@@ -44,17 +16,11 @@ class JobInspector:
         self.job_batch_id = None
         self._task_types = {}
         self._fignum = 1
-        if hours_back is None and start_date is None:
-            print("Considering last 7*24 hours:")
-            hours_back = 7*24
-        if end_date is None:
-            end_date = datetime.now(timezone.utc).isoformat()[:-len("+00:00")]
-        if start_date is None:
-            dt = timedelta(hours=hours_back)
-            start_date = Time(end_date, format="isot").datetime - dt
-            start_date = start_date.isoformat()
-        self.df0 = get_job_batch_ids(batch_name_substr, start_date, end_date,
-                                     bps_job_label=bps_job_label)
+        self.df0 = get_workflows(batch_name_substr,
+                                 hours_back=hours_back,
+                                 start_date=start_date,
+                                 end_date=end_date,
+                                 bps_job_label=bps_job_label)
         if not self.df0.empty:
             self.df0 = self.df0.query(f"doc_count > {min_doc_count}")
             self.df0 = self.df0.sort_values("JobStartDate", ignore_index=True)
@@ -163,7 +129,7 @@ class JobInspector:
             self.overlay_tasks(show_legend=True, timezone=timezone,
                                plot_memory_usage=plot_memory_usage)
             df = job_performance(job_batch_id)
-            print(df[df.columns[:-2]])
+            print(df[df.columns[:-2]].to_string())
 
     def overlay_tasks(self, show_legend=False, timezone="UTC",
                       plot_memory_usage=True):
