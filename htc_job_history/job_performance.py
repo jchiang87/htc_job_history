@@ -1,12 +1,44 @@
+import os
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from astropy.time import Time
 import numpy as np
 import pandas as pd
+import lsst.daf.butler as daf_butler
+from lsst.pipe.base import Pipeline
 from .opensearch_tools import get_os_job_info, get_job_batch_ids
 
 
-__all__ = ["get_workflows", "job_performance"]
+__all__ = ["get_workflows", "job_performance", "PipelineStageClassifier"]
+
+
+class PipelineStageClassifier:
+    def __init__(self, pipeline_yaml=None, repo="dp2_prep"):
+        if pipeline_yaml is None:
+            pipeline_yaml = os.path.join(os.environ["DRP_PIPE_DIR"],
+                                         "pipelines", "LSSTCam",
+                                         "DRP.yaml")
+        pipeline = Pipeline.from_uri(pipeline_yaml)
+        butler = daf_butler.Butler(repo)
+        pg = pipeline.to_graph(registry=butler.registry)
+        stages = sorted(_ for _ in pg.task_subsets.keys()
+                        if _.startswith("stage"))
+        self.task_subsets = defaultdict(set)
+        for stage in stages:
+            stage_name = stage[:len("stage1")]
+            self.task_subsets[stage_name].update(set(pg.task_subsets[stage]))
+        # Include common clusters
+        self.task_subsets['stage1'].update({"step1detector", "step1b_visits"})
+        self.task_subsets['stage2'].update({"step2d_refitpsf", "step2d_visits"})
+        self.task_subsets['stage3'].update({"makeWarpTract", "coadd"})
+        self.task_subsets['stage4'].update({"diffim", "step4c_forced_phot",
+                                            "step4c_forced_phot_dia"})
+
+    def classify(self, task_list):
+        overlaps = []
+        for stage, subset in self.task_subsets.items():
+            overlaps.append((len(subset.intersection(set(task_list))), stage))
+        return sorted(overlaps, key=lambda x: x[0])[-1][-1]
 
 
 def get_workflows(batch_name_substr, hours_back=None, start_date=None,
