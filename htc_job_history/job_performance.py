@@ -58,7 +58,9 @@ def get_workflows(batch_name_substr, hours_back=None, start_date=None,
 
 
 def job_performance(job_batch_ids):
-    if isinstance(job_batch_ids, str):
+    if isinstance(job_batch_ids, pd.DataFrame):
+        df0 = job_batch_ids
+    elif isinstance(job_batch_ids, str):
         df0 = get_os_job_info(job_batch_ids)
     else:
         df0 = pd.concat([get_os_job_info(_) for _ in job_batch_ids])
